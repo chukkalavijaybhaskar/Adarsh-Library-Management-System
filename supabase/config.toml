@@ -1,0 +1,10 @@
+project_id = "adarsh-library-management-system"
+
+[functions.due-reminders]
+verify_jwt = false
+# In hosted Supabase, set the schedule from Dashboard -> Edge Functions ->
+# due-reminders -> Cron ("0 3 * * *" = daily at 03:00 UTC). The schedule
+# field below is honored by `supabase functions deploy --no-verify-jwt`
+# workflows using the Supabase CLI cron integration; keep the dashboard
+# value as the source of truth if the two ever disagree.
+schedule = "0 3 * * *"

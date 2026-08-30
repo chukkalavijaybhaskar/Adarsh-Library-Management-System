@@ -1008,29 +1008,3 @@ insert into academic_options (category, value, sort_order) values
   ('branch', 'CIVIL', 5),
   ('branch', 'IT', 6)
 on conflict (category, value) do nothing;
-
-
-
-create or replace function public.rpc_is_librarian_email(
-  p_email text
-)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.librarian_emails le
-    where lower(le.email) = lower(trim(p_email))
-  );
-$$;
-
-revoke all
-on function public.rpc_is_librarian_email(text)
-from public;
-
-grant execute
-on function public.rpc_is_librarian_email(text)
-to anon, authenticated;

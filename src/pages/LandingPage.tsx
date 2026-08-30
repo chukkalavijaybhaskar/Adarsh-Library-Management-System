@@ -1,141 +1,252 @@
-import { useEffect } from 'react'
+```tsx
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BookOpen, GraduationCap, KeyRound } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
-
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useAuth } from '@/features/auth/AuthProvider'
+import {
+  isLibrarianEmail,
+  signInWithGoogleIdToken,
+} from '@/features/auth/api'
 
-export default function LandingPage() {
-  const { session, profile, loading, signOut } = useAuth()
-  const navigate = useNavigate()
+interface GoogleCredentialResponse {
+  credential: string
+}
 
-  useEffect(() => {
-    // Check whether the user has just returned from
-    // "Continue as Librarian" Google login.
-    const params = new URLSearchParams(window.location.search)
-    const librarianLogin = params.get('librarianLogin')
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: {
+            client_id: string
+            callback: (response: GoogleCredentialResponse) => void
+            auto_select?: boolean
+            cancel_on_tap_outside?: boolean
+          }) => void
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              theme?: string
+              size?: string
+              width?: number
+              text?: string
+              shape?: string
+              logo_alignment?: string
+            },
+          ) => void
+        }
+      }
+    }
+  }
+}
 
-    // Normal visit to the home page.
-    // Do nothing.
-    if (librarianLogin !== '1') {
-      return
+function decodeGoogleEmail(idToken: string): string | null {
+  try {
+    const parts = idToken.split('.')
+
+    if (parts.length !== 3) {
+      return null
     }
 
-    // Wait until Supabase finishes loading the Google session
-    // and the user's profile.
-    if (loading) {
-      return
-    }
+    const payload = parts[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
 
-    // No Google session.
-    // Just stay on the home page.
-    if (!session) {
-      navigate('/', { replace: true })
-      return
-    }
-
-    // =========================================================
-    // CASE 1: Google account IS the authorized librarian
-    // =========================================================
-    if (profile?.role === 'librarian') {
-      navigate('/librarian/dashboard', { replace: true })
-      return
-    }
-
-    // =========================================================
-    // CASE 2: Google account is NOT a librarian
-    // =========================================================
-
-    // Show the required message.
-    toast.error(
-      "You're not a Librarian, so please login as a student."
+    const padded = payload.padEnd(
+      payload.length + ((4 - (payload.length % 4)) % 4),
+      '=',
     )
 
-    // Remove the Google session.
-    // This is important because otherwise the student account
-    // could remain logged in.
-    signOut().finally(() => {
-      // Finally return to the main home page.
-      navigate('/', { replace: true })
-    })
-  }, [session, profile, loading, signOut, navigate])
+    const json = JSON.parse(atob(padded)) as {
+      email?: string
+      email_verified?: boolean
+    }
+
+    if (!json.email || json.email_verified !== true) {
+      return null
+    }
+
+    return json.email.toLowerCase().trim()
+  } catch {
+    return null
+  }
+}
+
+export default function LibrarianLoginPage() {
+  const navigate = useNavigate()
+  const googleButtonRef = useRef<HTMLDivElement | null>(null)
+
+  const [loading, setLoading] = useState(false)
+  const [googleReady, setGoogleReady] = useState(false)
+
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as
+      | string
+      | undefined
+
+    if (!clientId) {
+      toast.error('Google Client ID is not configured.')
+      return
+    }
+
+    let cancelled = false
+    let attempts = 0
+
+    const setupGoogle = () => {
+      if (cancelled) return
+
+      if (!window.google?.accounts?.id) {
+        attempts += 1
+
+        if (attempts < 100) {
+          window.setTimeout(setupGoogle, 100)
+        }
+
+        return
+      }
+
+      if (!googleButtonRef.current) {
+        return
+      }
+
+      googleButtonRef.current.innerHTML = ''
+
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response) => {
+          if (cancelled) {
+            return
+          }
+
+          setLoading(true)
+
+          try {
+            const email = decodeGoogleEmail(response.credential)
+
+            if (!email) {
+              toast.error(
+                'Could not verify the selected Google account.',
+              )
+              return
+            }
+
+            const allowed = await isLibrarianEmail(email)
+
+            if (!allowed) {
+              toast.error(
+                "You're not a Librarian, so please login as a student.",
+              )
+              return
+            }
+
+            await signInWithGoogleIdToken(response.credential)
+
+            navigate('/librarian/dashboard', {
+              replace: true,
+            })
+          } catch (error) {
+            console.error(
+              'Librarian Google sign-in failed:',
+              error,
+            )
+
+            toast.error(
+              'Could not sign in as librarian. Please try again.',
+            )
+          } finally {
+            if (!cancelled) {
+              setLoading(false)
+            }
+          }
+        },
+
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      })
+
+      window.google.accounts.id.renderButton(
+        googleButtonRef.current,
+        {
+          theme: 'outline',
+          size: 'large',
+          width: 320,
+          text: 'continue_with',
+          shape: 'rectangular',
+          logo_alignment: 'left',
+        },
+      )
+
+      setGoogleReady(true)
+    }
+
+    setupGoogle()
+
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-16">
-      <div className="mb-10 flex flex-col items-center gap-3 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <BookOpen className="h-7 w-7" />
-        </div>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="items-center text-center">
+          <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <KeyRound className="h-5 w-5" />
+          </div>
 
-        <h1 className="font-display text-3xl font-bold">
-          Adarsh Library Management System
-        </h1>
+          <CardTitle>Librarian Login</CardTitle>
 
-        <p className="max-w-md text-muted-foreground">
-          Sign in to browse the catalog, track your issued books, or manage
-          the college library.
-        </p>
-      </div>
+          <CardDescription>
+            Sign in with your authorized Google account.
+          </CardDescription>
+        </CardHeader>
 
-      <div className="grid w-full max-w-2xl gap-5 sm:grid-cols-2">
-        {/* =========================
-            STUDENT PORTAL
-        ========================== */}
-        <Card className="transition-shadow hover:shadow-md">
-          <CardHeader>
-            <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <GraduationCap className="h-5 w-5" />
-            </div>
+        <CardContent>
+          <div className="flex min-h-10 justify-center">
+            <div ref={googleButtonRef} />
+          </div>
 
-            <CardTitle>Student Portal</CardTitle>
+          {!googleReady && !loading && (
+            <p className="mt-3 text-center text-sm text-muted-foreground">
+              Loading Google sign-in…
+            </p>
+          )}
 
-            <CardDescription>
-              Log in with your registration number to search books and track
-              loans.
-            </CardDescription>
-          </CardHeader>
+          {loading && (
+            <p className="mt-3 text-center text-sm text-muted-foreground">
+              Checking librarian access…
+            </p>
+          )}
 
-          <CardContent>
-            <Button asChild className="w-full">
-              <Link to="/student/login">
-                Continue as Student
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-4 w-full"
+            onClick={() => navigate('/')}
+            disabled={loading}
+          >
+            Back to home
+          </Button>
 
-        {/* =========================
-            LIBRARIAN PORTAL
-        ========================== */}
-        <Card className="transition-shadow hover:shadow-md">
-          <CardHeader>
-            <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
-              <KeyRound className="h-5 w-5" />
-            </div>
-
-            <CardTitle>Librarian Portal</CardTitle>
-
-            <CardDescription>
-              Sign in with your authorized Google account to manage the
-              library.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-            <Button
-              asChild
-              variant="accent"
-              className="w-full"
+          <p className="mt-2 text-center text-sm text-muted-foreground">
+            <Link
+              to="/"
+              className="font-medium text-primary hover:underline"
             >
-              <Link to="/librarian/login">
-                Continue as Librarian
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+              Main page
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
     </div>
   )
 }
+```

@@ -11,8 +11,13 @@ export default function LibrarianLoginPage() {
 
   async function handleGoogle() {
     setLoading(true)
+
     try {
-      await signInWithGoogle('/librarian/dashboard')
+      // IMPORTANT:
+      // Do NOT send the user directly to the librarian dashboard.
+      // First return to the home page where the Google account
+      // will be checked against the librarian role.
+      await signInWithGoogle('/?librarianLogin=1')
     } catch {
       toast.error('Could not start Google sign-in. Please try again.')
       setLoading(false)
@@ -26,15 +31,30 @@ export default function LibrarianLoginPage() {
           <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-lg bg-accent text-accent-foreground">
             <KeyRound className="h-5 w-5" />
           </div>
+
           <CardTitle>Librarian Login</CardTitle>
-          <CardDescription>Sign in with your authorized Google account.</CardDescription>
+
+          <CardDescription>
+            Sign in with your authorized Google account.
+          </CardDescription>
         </CardHeader>
+
         <CardContent>
-          <Button className="w-full" variant="outline" onClick={handleGoogle} disabled={loading}>
-            <Chrome className="h-4 w-4" /> Continue with Google
+          <Button
+            className="w-full"
+            variant="outline"
+            onClick={handleGoogle}
+            disabled={loading}
+          >
+            <Chrome className="h-4 w-4" />
+            {loading ? 'Signing in...' : 'Continue with Google'}
           </Button>
+
           <p className="mt-5 text-center text-sm text-muted-foreground">
-            <Link to="/" className="font-medium text-primary hover:underline">
+            <Link
+              to="/"
+              className="font-medium text-primary hover:underline"
+            >
               Back to home
             </Link>
           </p>
@@ -43,3 +63,4 @@ export default function LibrarianLoginPage() {
     </div>
   )
 }
+```

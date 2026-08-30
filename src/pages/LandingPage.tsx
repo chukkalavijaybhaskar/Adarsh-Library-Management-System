@@ -1,4 +1,3 @@
-```tsx
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { KeyRound } from 'lucide-react'
@@ -249,4 +248,3 @@ export default function LibrarianLoginPage() {
     </div>
   )
 }
-```

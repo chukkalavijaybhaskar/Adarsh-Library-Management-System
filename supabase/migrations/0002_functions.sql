@@ -592,3 +592,26 @@ end;
 $$;
 
 grant execute on function rpc_run_due_reminders() to service_role;
+create or replace function public.rpc_is_librarian_email(
+  p_email text
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.librarian_emails le
+    where lower(le.email) = lower(trim(p_email))
+  );
+$$;
+
+revoke all
+on function public.rpc_is_librarian_email(text)
+from public;
+
+grant execute
+on function public.rpc_is_librarian_email(text)
+to anon, authenticated;
